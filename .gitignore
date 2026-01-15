@@ -1,0 +1,40 @@
+*__pycache__
+*.csv
+*.pth
+*.pt
+*.npz
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.log
+*.txt
+
+data/
+output/
+outputs/
+report/
+reports/
+results
+cifar10_iter_ema_noise_validation/
+store_output_cifar10_iter_ema_noise_validation_v2/
+store_output_cifar10_iter_ema_noise_validation/
+backup_code/
+backup_code
+
+# Python
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data / Checkpoints
+data/
+outputs/
+checkpoints/
+wandb/
+
+# OS
+.DS_Store
+Thumbs.db
