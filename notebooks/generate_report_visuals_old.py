@@ -58,7 +58,7 @@ def aggregate_summary_results(source_dir: Path) -> Optional[pd.DataFrame]:
     return full_df
 
 
-def create_main_table(df: pd.DataFrame, filter_stats: Optional[pd.DataFrame] = None) -> Optional[pd.DataFrame]:
+def create_main_table(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     """(1) Creates the main results table comparing Baseline vs. methods."""
     logging.info("Generating Main Results Table...")
 
@@ -122,18 +122,6 @@ def create_main_table(df: pd.DataFrame, filter_stats: Optional[pd.DataFrame] = N
 
     final_table = pd.DataFrame(results)
 
-    # Merge with filter stats if provided
-    if filter_stats is not None:
-        # The 'method' column is clean at this point in both dataframes
-        # We only need precision, recall, f1_score for the main table
-        stats_to_merge = filter_stats[['noise_ratio', 'method', 'precision', 'recall', 'f1_score']].copy()
-        final_table = pd.merge(
-            final_table,
-            stats_to_merge,
-            on=['noise_ratio', 'method'],
-            how='left'
-        )
-
     # Formatting
     final_table['is_best_marker'] = final_table.apply(
         lambda row: ' ⭐' if row['is_best'] and row['method'] != 'Baseline' else '', axis=1
@@ -145,69 +133,10 @@ def create_main_table(df: pd.DataFrame, filter_stats: Optional[pd.DataFrame] = N
     final_table['val_acc_orig'] = (final_table['val_acc_orig'] * 100).map('{:.2f}%'.format)
     final_table['kept_ratio'] = (final_table['kept_ratio'] * 100).map('{:.2f}%'.format)
 
-    # Format new columns from filter_stats
-    for col in ['precision', 'recall', 'f1_score']:
-        if col in final_table.columns:
-            # Use .fillna(0) before mapping to handle NaNs from the left merge (for Baseline)
-            final_table[col] = (final_table[col].fillna(0) * 100).map('{:.2f}%'.format)
-
     # Reorder columns
-    final_cols_order = [
-        'noise_ratio', 'method', 'test_acc_orig', 'delta_vs_baseline', 'val_acc_orig', 
-        'best_iteration', 'kept_ratio', 'alpha',
-        'precision', 'recall', 'f1_score'
-    ]
-    final_cols_existing = [c for c in final_cols_order if c in final_table.columns]
-    final_table = final_table[final_cols_existing]
+    final_table = final_table[['noise_ratio', 'method', 'test_acc_orig', 'delta_vs_baseline', 'val_acc_orig', 'best_iteration', 'kept_ratio', 'alpha']]
 
     return final_table
-
-
-def create_best_run_filter_statistics_table(df: pd.DataFrame) -> Optional[pd.DataFrame]:
-    """
-    Creates a table of filter performance statistics ONLY for the best iteration of the best run
-    for each (noise_ratio, filter_mode) combination.
-    This is used to populate the main results table.
-    """
-    logging.info("Generating Filter Statistics Table for best runs...")
-
-    stats_rows = []
-
-    # Find the best run (alpha) for each (noise_ratio, filter_mode) combination
-    best_iter_df = df.loc[df.groupby('exp_path')['test_acc_orig'].idxmax()]
-    best_runs = best_iter_df.loc[
-        best_iter_df.groupby(['noise_ratio', 'filter_mode'])['test_acc_orig'].idxmax()
-    ]
-
-    for _, best_run_row in best_runs.iterrows():
-        exp_path = Path(best_run_row['exp_path'])
-        best_iter = int(best_run_row['iteration'])
-        selection_file = exp_path / f"iteration_{best_iter}" / "selection" / f"selection_iter_{best_iter}.csv"
-
-        if not selection_file.exists():
-            logging.warning(f"Selection file not found for best run, skipping: {selection_file}")
-            continue
-
-        sel_df = pd.read_csv(selection_file)
-
-        tp = len(sel_df[(sel_df['noise_flag'] == 0) & (sel_df['filter_flag'] == 'kept')])
-        fp = len(sel_df[(sel_df['noise_flag'] == 1) & (sel_df['filter_flag'] == 'kept')])
-        fn = len(sel_df[(sel_df['noise_flag'] == 0) & (sel_df['filter_flag'] == 'removed')])
-        tn = len(sel_df[(sel_df['noise_flag'] == 1) & (sel_df['filter_flag'] == 'removed')])
-
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-
-        stats_rows.append({
-            'noise_ratio': best_run_row['noise_ratio'],
-            'method': best_run_row['filter_mode'], # Use clean name for merging
-            'precision': precision,
-            'recall': recall,
-            'f1_score': f1_score,
-        })
-
-    return pd.DataFrame(stats_rows) if stats_rows else None
 
 
 def create_detailed_filter_statistics_table(df: pd.DataFrame) -> Optional[pd.DataFrame]:
@@ -224,6 +153,10 @@ def create_detailed_filter_statistics_table(df: pd.DataFrame) -> Optional[pd.Dat
 
     for _, best_run_row in best_runs.iterrows():
         exp_path = Path(best_run_row['exp_path'])
+        noise_ratio = best_run_row['noise_ratio']
+        filter_mode = best_run_row['filter_mode']
+        alpha = best_run_row['alpha']
+
         iter_dirs = sorted(exp_path.glob("iteration_*"), key=lambda p: int(p.name.split('_')[-1]))
 
         for iter_dir in iter_dirs:
@@ -245,7 +178,9 @@ def create_detailed_filter_statistics_table(df: pd.DataFrame) -> Optional[pd.Dat
             f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
             all_stats_rows.append({
-                'exp_path': str(exp_path),  # Key for merging
+                'noise_ratio': noise_ratio,
+                'filter_mode': filter_mode,
+                'alpha': alpha,
                 'iteration': iter_num,
                 'precision': precision,
                 'recall': recall,
@@ -260,37 +195,7 @@ def create_detailed_filter_statistics_table(df: pd.DataFrame) -> Optional[pd.Dat
         return None
 
     stats_table = pd.DataFrame(all_stats_rows)
-
-    # Merge with the main dataframe to get the other columns
-    cols_to_add = [
-        'exp_path', 'iteration', 'noise_ratio', 'filter_mode', 'alpha',
-        'kept_ratio', 'samples_kept', 'samples_removed', 'samples_total',
-        'training_samples_used', 'num_relabelled'
-    ]
-    
-    # Ensure all requested columns exist in the source dataframe `df`
-    cols_to_add_existing = [c for c in cols_to_add if c in df.columns]
-
-    merged_df = pd.merge(
-        stats_table,
-        df[cols_to_add_existing],
-        on=['exp_path', 'iteration'],
-        how='left'
-    )
-    
-    # Reorder columns for better readability
-    final_cols_order = [
-        'noise_ratio', 'filter_mode', 'alpha', 'iteration',
-        'precision', 'recall', 'f1_score',
-        'kept_ratio', 'samples_kept', 'samples_removed', 'samples_total',
-        'training_samples_used', 'num_relabelled',
-        'TP', 'FP', 'FN', 'TN'
-    ]
-    
-    # Use only columns that actually exist in the merged dataframe
-    final_cols_existing = [c for c in final_cols_order if c in merged_df.columns]
-    
-    return merged_df[final_cols_existing]
+    return stats_table
 
 
 def plot_ablation_alpha(df: pd.DataFrame, report_dir: Path):
@@ -564,15 +469,8 @@ def main():
     full_df.to_csv(report_dir / "aggregated_summary_results.csv", index=False)
     logging.info(f"Saved aggregated data to {report_dir / 'aggregated_summary_results.csv'}")
 
-    # 2. Generate Filter Statistics ONLY for best runs (to be merged into main table)
-    best_run_filter_stats = create_best_run_filter_statistics_table(full_df)
-    if best_run_filter_stats is not None:
-        # This table is useful for a quick look at the best filter performance
-        best_run_filter_stats.to_csv(report_dir / "best_run_filter_statistics.csv", index=False)
-        logging.info(f"Saved best run filter statistics table to {report_dir / 'best_run_filter_statistics.csv'}")
-
-    # 3. Generate Main Table (and merge filter stats)
-    main_table = create_main_table(full_df, best_run_filter_stats)
+    # 2. Generate Main Table
+    main_table = create_main_table(full_df)
     if main_table is not None:
         main_table.to_csv(report_dir / "main_results_table.csv", index=False)
         logging.info(f"Saved main results table to {report_dir / 'main_results_table.csv'}")
@@ -580,7 +478,7 @@ def main():
         print(main_table.to_markdown(index=False))
         print("--------------------------\n")
 
-    # 4. Generate DETAILED Filter Statistics for every iteration of the best runs
+    # 3. Generate Filter Statistics Tables
     detailed_filter_stats_table = create_detailed_filter_statistics_table(full_df)
     if detailed_filter_stats_table is not None:
         detailed_filter_stats_table.to_csv(report_dir / "detailed_filter_statistics.csv", index=False)
@@ -589,7 +487,7 @@ def main():
         print(detailed_filter_stats_table.head().to_markdown(index=False))
         print("------------------------------------------\n")
 
-    # 5. Generate Plots
+    # 4. Generate Plots
     plot_ablation_alpha(full_df, report_dir)
     plot_kept_ratio_over_time(full_df, report_dir)
     plot_test_acc_over_time(full_df, report_dir)
