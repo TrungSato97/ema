@@ -52,8 +52,8 @@ class TrainConfig:
     # split_test: float = 0.1
 
     # Training
-    
-    use_model_from_hf = False
+    use_model_from_hf = True
+    hf_repo_id = "edadaltocg/resnet18_cifar100"
     pretrained = True
     
     batch_size: int = 256
@@ -84,7 +84,7 @@ class TrainConfig:
     resume: bool = False
 
     # Misc
-    num_classes: int = 10
+    num_classes: int = 100
     verbose: bool = True
 
     def validate(self) -> None:

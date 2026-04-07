@@ -215,7 +215,7 @@ def train_iteration(iter_idx: int, config: TrainConfig, train_loader: torch.util
     set_global_seed(config.seed, deterministic=True)
 
     device = config.device
-    model = get_model(num_classes=config.num_classes, pretrained=True, device=device)
+    model = get_model(num_classes=config.num_classes, pretrained=config.pretrained, device=device)
     optimizer, scheduler = get_optimizer_scheduler(model, config, total_epochs=config.max_epochs_per_iter)
     criterion = nn.CrossEntropyLoss()
 

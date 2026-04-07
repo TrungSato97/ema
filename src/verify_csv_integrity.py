@@ -12,13 +12,29 @@ import numpy as np
 import os
 from pathlib import Path
 import argparse
-from collections import defaultdict
+from typing import Dict
 
-# CIFAR-10 class names theo thứ tự chính xác
-CIFAR10_CLASSES = [
-    'airplane', 'automobile', 'bird', 'cat', 'deer',
-    'dog', 'frog', 'horse', 'ship', 'truck'
-]
+
+def get_dataset_info(df: pd.DataFrame) -> Dict:
+    """Suy ra thông tin dataset (số lớp, tên lớp) từ DataFrame."""
+    if 'label_orig' not in df.columns or 'class_name' not in df.columns:
+        raise ValueError("CSV phải chứa cột 'label_orig' và 'class_name' để suy ra thông tin.")
+    
+    num_classes = int(df['label_orig'].max()) + 1
+    
+    # Tạo mapping từ label_orig -> class_name để đảm bảo thứ tự đúng
+    class_map = df[['label_orig', 'class_name']].drop_duplicates().sort_values('label_orig')
+    
+    if len(class_map) != num_classes or not all(class_map['label_orig'] == range(num_classes)):
+        raise ValueError(f"Phát hiện sự không nhất quán trong các lớp. "
+                         f"Max label_orig là {num_classes-1} nhưng tìm thấy {len(class_map)} cặp (label, class) duy nhất "
+                         f"hoặc các label không liên tục.")
+    
+    class_names = class_map['class_name'].tolist()
+
+    print("\n--- Thông tin Dataset được suy ra ---")
+    print(f"✓ Số lượng lớp: {num_classes}")
+    return {"num_classes": num_classes, "class_names": class_names}
 
 
 def verify_csv_structure(df: pd.DataFrame, csv_path: str) -> bool:
@@ -61,19 +77,19 @@ def verify_index_column(df: pd.DataFrame) -> bool:
     return True
 
 
-def verify_label_columns(df: pd.DataFrame) -> bool:
+def verify_label_columns(df: pd.DataFrame, num_classes: int) -> bool:
     """Verify tính hợp lệ của label_orig và label_noisy."""
     print("\n--- Verifying Label Columns ---")
     
     # Check label_orig range
-    if df['label_orig'].min() < 0 or df['label_orig'].max() > 9:
-        print(f"❌ FAILED: label_orig out of range [0, 9]: min={df['label_orig'].min()}, max={df['label_orig'].max()}")
+    if df['label_orig'].min() < 0 or df['label_orig'].max() >= num_classes:
+        print(f"❌ FAILED: label_orig out of range [0, {num_classes-1}]: min={df['label_orig'].min()}, max={df['label_orig'].max()}")
         return False
-    print(f"✓ label_orig in valid range [0, 9]")
+    print(f"✓ label_orig in valid range [0, {num_classes-1}]")
     
     # Check label_noisy range
-    if df['label_noisy'].min() < 0 or df['label_noisy'].max() > 9:
-        print(f"❌ FAILED: label_noisy out of range [0, 9]: min={df['label_noisy'].min()}, max={df['label_noisy'].max()}")
+    if df['label_noisy'].min() < 0 or df['label_noisy'].max() >= num_classes:
+        print(f"❌ FAILED: label_noisy out of range [0, {num_classes-1}]: min={df['label_noisy'].min()}, max={df['label_noisy'].max()}")
         return False
     print(f"✓ label_noisy in valid range [0, 9]")
     
@@ -100,21 +116,21 @@ def verify_label_columns(df: pd.DataFrame) -> bool:
     return True
 
 
-def verify_class_name_column(df: pd.DataFrame) -> bool:
+def verify_class_name_column(df: pd.DataFrame, class_names: list) -> bool:
     """Verify rằng class_name mapping đúng với label_orig."""
     print("\n--- Verifying Class Name Column ---")
     
     # Check that all class names are valid
-    valid_classes = set(CIFAR10_CLASSES)
+    valid_classes = set(class_names)
     invalid_classes = set(df['class_name'].unique()) - valid_classes
     if invalid_classes:
         print(f"❌ FAILED: Found invalid class names: {invalid_classes}")
         return False
-    print(f"✓ All class names are valid CIFAR-10 classes")
+    print(f"✓ All class names are valid for this dataset")
     
     # Check mapping between label_orig and class_name
     for idx, row in df.iterrows():
-        expected_class = CIFAR10_CLASSES[int(row['label_orig'])]
+        expected_class = class_names[int(row['label_orig'])]
         if row['class_name'] != expected_class:
             print(f"❌ FAILED: Row {idx} has label_orig={row['label_orig']} but class_name='{row['class_name']}' (expected '{expected_class}')")
             return False
@@ -130,7 +146,7 @@ def verify_class_name_column(df: pd.DataFrame) -> bool:
     return True
 
 
-def verify_image_paths(df: pd.DataFrame, check_existence: bool = True) -> bool:
+def verify_image_paths(df: pd.DataFrame, class_names: list, check_existence: bool = True) -> bool:
     """Verify tính hợp lệ của image paths."""
     print("\n--- Verifying Image Paths ---")
     
@@ -169,7 +185,7 @@ def verify_image_paths(df: pd.DataFrame, check_existence: bool = True) -> bool:
             return False
         
         # Verify class_name matches (based on label_orig)
-        expected_class = CIFAR10_CLASSES[int(row['label_orig'])]
+        expected_class = class_names[int(row['label_orig'])]
         if class_from_path != expected_class:
             print(f"❌ FAILED: Row {idx} path class '{class_from_path}' doesn't match expected '{expected_class}' (label_orig={row['label_orig']})")
             return False
@@ -295,13 +311,20 @@ def verify_csv_file(csv_path: str, check_file_existence: bool = True) -> bool:
         print(f"❌ FAILED: Could not load CSV file: {e}")
         return False
     
+    # Infer dataset info
+    try:
+        dataset_info = get_dataset_info(df)
+    except Exception as e:
+        print(f"❌ FAILED: Could not infer dataset info: {e}")
+        return False
+
     # Run all checks
     checks = [
         ("CSV Structure", lambda: verify_csv_structure(df, csv_path)),
         ("Index Column", lambda: verify_index_column(df)),
-        ("Label Columns", lambda: verify_label_columns(df)),
-        ("Class Name Column", lambda: verify_class_name_column(df)),
-        ("Image Paths", lambda: verify_image_paths(df, check_file_existence)),
+        ("Label Columns", lambda: verify_label_columns(df, dataset_info['num_classes'])),
+        ("Class Name Column", lambda: verify_class_name_column(df, dataset_info['class_names'])),
+        ("Image Paths", lambda: verify_image_paths(df, dataset_info['class_names'], check_file_existence)),
         ("Noise Flag", lambda: verify_noise_flag(df)),
         ("Split Column", lambda: verify_split_column(df)),
         ("Test Set Cleanliness", lambda: verify_test_set_cleanliness(df)),

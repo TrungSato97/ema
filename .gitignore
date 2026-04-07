@@ -10,6 +10,12 @@
 *.log
 *.txt
 
+*.flag
+*10-batches-py
+*.pt
+*.pyc
+
+
 data/
 output/
 outputs/
