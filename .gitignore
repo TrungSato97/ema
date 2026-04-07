@@ -14,8 +14,15 @@
 *10-batches-py
 *.pt
 *.pyc
+*.zip
+*.tar
 
 
+exper_paper/
+backup/
+O2U_Net_Source/
+data_imagenet100_cmc/
+imagenet100_cmc/
 data/
 output/
 outputs/
