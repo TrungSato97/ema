@@ -19,6 +19,16 @@ def get_model(num_classes: int, pretrained: bool = True, device: str = "cpu") ->
     """
     Load ResNet-18 pretrained on ImageNet and replace the final fc layer for num_classes.
     """
+    if num_classes == 14:
+        logger.info("Initializing ResNet18 for Clothing1M (ImageNet1K Pretrained)...")
+        # Load weights chuẩn cho ảnh 224x224
+        model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+        # Đổi lớp cuối cùng thành 14 output classes
+        model.fc = nn.Linear(model.fc.in_features, num_classes)
+        model = model.to(device)
+        logger.info("Loaded ResNet18 with %d output classes on device %s", num_classes, device)
+        return model
+    
     use_hf_for_imagenet100 = (num_classes == 100 and pretrained) 
     
     if use_hf_for_imagenet100:
