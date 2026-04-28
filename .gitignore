@@ -17,7 +17,9 @@
 *.zip
 *.tar
 
-
+O2_unet/
+data_cifar10N/
+data_cifar100N/
 exper_paper/
 backup/
 O2U_Net_Source/
