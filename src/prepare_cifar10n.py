@@ -141,13 +141,22 @@ def build_cifar10n_pipeline(pt_file_path: str, val_split: float = 0.1, seed: int
     y_test_orig = np.array(torchvision.datasets.CIFAR10(root=str(data_root), train=False, download=False).targets, dtype=int)
     class_names = tmp_ds.classes
 
+    # # 2. Đọc nhãn nhiễu
+    # logger.info(f"Đang đọc file nhãn nhiễu: {pt_path.name}")
+    # try:
+    #     # Cập nhật an toàn cho PyTorch >= 2.0
+    #     noise_dict = torch.load(pt_path, weights_only=True)
+    # except TypeError:
+    #     # Fallback cho PyTorch bản quá cũ
+    #     noise_dict = torch.load(pt_path)
+    
     # 2. Đọc nhãn nhiễu
     logger.info(f"Đang đọc file nhãn nhiễu: {pt_path.name}")
     try:
-        # Cập nhật an toàn cho PyTorch >= 2.0
-        noise_dict = torch.load(pt_path, weights_only=True)
+        # Tắt weights_only vì file .pt chứa cấu trúc Numpy Array của tác giả
+        noise_dict = torch.load(pt_path, weights_only=False)
     except TypeError:
-        # Fallback cho PyTorch bản quá cũ
+        # Fallback cho PyTorch bản quá cũ (trước 1.13) không có tham số này
         noise_dict = torch.load(pt_path)
     
     # Các loại nhiễu chuẩn trong CIFAR-10N
