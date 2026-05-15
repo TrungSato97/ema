@@ -107,9 +107,10 @@ def plot_noise_confusion_matrix_counts(csv_path: str,
     # Vẽ heatmap
     fig, ax = plt.subplots(figsize=(12, 10))
     
-    sns.heatmap(confusion_matrix, annot=True, fmt='d', cmap='YlOrRd', 
+    # Dùng dải màu 'Blues' (Từ trắng sang xanh dương đậm) mang lại cảm giác cực kỳ chuyên nghiệp
+    sns.heatmap(confusion_matrix, annot=True, fmt='d', cmap='Blues', 
                 cbar_kws={'label': 'Sample Count'},
-                linewidths=0.5, linecolor='gray', ax=ax)
+                linewidths=1.0, linecolor='white', ax=ax) # Sửa linecolor thành white cho thanh thoát
     
     ax.set_xlabel('Noisy Label', fontsize=13, fontweight='bold')
     ax.set_ylabel('Original Label', fontsize=13, fontweight='bold')
@@ -173,9 +174,10 @@ def plot_noise_confusion_matrix_ratios(csv_path: str,
     # Vẽ heatmap
     fig, ax = plt.subplots(figsize=(12, 10))
     
+    # Dùng dải màu 'rocket_r' hoặc 'crest' (Seaborn) rất sang trọng cho biểu đồ tỷ lệ %
     sns.heatmap(confusion_matrix_normalized, annot=True, fmt='.1f', 
-                cmap='RdYlGn_r', cbar_kws={'label': 'Percentage (%)'},
-                linewidths=0.5, linecolor='gray', ax=ax,
+                cmap='Blues', cbar_kws={'label': 'Percentage (%)'},
+                linewidths=1.0, linecolor='white', ax=ax,
                 vmin=0, vmax=100)
     
     ax.set_xlabel('Noisy Label', fontsize=13, fontweight='bold')
